@@ -18,35 +18,56 @@ function getCurrentTabTitle(callback) {
   });
 }
 
-// Display Genius' lyrics in the popup
-function renderLyrics(html) {
-  document.getElementById('page').innerHTML = html;
+var page = document.querySelector('#page');
+
+function appendHTML(html) {
+  page.appendChild(html);
+}
+
+function parseHTML(html, selector = '*') {
+  return new DOMParser().parseFromString(html, 'text/html').querySelector('body ' + selector);
+}
+
+function parseLyrics(html) {
+  return parseHTML(html, '.lyrics');
+}
+
+// Display HTML in the popup
+function cleanTitle(title) {
+  var cleanedTitle = title.replace(/youtube|deezer/i, '');
+  cleanedTitle = cleanedTitle.replace(/\ -\ /ig, ' ');
+  cleanedTitle = cleanedTitle.replace(/\ x\ /ig, ' ');
+  cleanedTitle = cleanedTitle.replace(/[\[\(](?:official|music|video|explicit)[^.]*[\)\]]/i, '');
+  cleanedTitle = cleanedTitle.replace(/feat\.?|ft\.?/, '');
+  return cleanedTitle;
 }
 
 document.addEventListener('DOMContentLoaded', function() {
   var request = window.superagent;
 
   getCurrentTabTitle(function(title) {
-    var cleanTitle = title.replace(' - YouTube', '');
-    renderLyrics(`Querying Genius API for "${cleanTitle}" ...`);
+    var parser = new DOMParser();
+    var cleanedTitle = cleanTitle(title);
+    appendHTML(parseHTML(`<p>Querying Genius API for "${cleanedTitle}" ...</p>`));
 
     // Request Genius API to get songs relevant with the given title
     request
-      .get(`https://api.genius.com/search?q=${encodeURIComponent(cleanTitle)}`)
+      .get(`https://api.genius.com/search?q=${encodeURIComponent(cleanedTitle)}`)
       .set('Authorization', `Bearer ${GENIUS_ACCESS_TOKEN}`) // Authorization header
       .end(function(err, res) {
         if (err == null && res.body.response.hits.length > 0) { // No error
           // Get most relevant song's id
           var url = res.body.response.hits[0].result.url;
+          page.removeChild(page.firstChild);
+          appendHTML(parseHTML(`<a href="${url}" target="_blank">${cleanedTitle}</a>`));
           // Request song with his id
           request
             .get(url)
             .end(function(err, res) {
               if (err == null) {
-                console.log(res)
-                /////////////////////////////////// PROBLEME DE CORS ///////////
-                // Render HTML lyrics with annotations
-                // renderLyrics(lyrics);
+                lyrics = parseLyrics(res.text)
+                console.log(lyrics);
+                appendHTML(lyrics);
               }
             });
         }
